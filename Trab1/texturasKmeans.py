@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.cluster import KMeans, DBSCAN
+import os
 
 def extrair_vetores(imagens_filtradas, tamanho_bloco=16):
     h, w = imagens_filtradas[0].shape
@@ -26,80 +27,78 @@ def resize_image(img, h_blocos, w_blocos, labels):
     return cv2.resize(img_clusters.astype(np.uint8), (img.shape[1], img.shape[0]),
                       interpolation=cv2.INTER_NEAREST)
 
-# Carrega imagem em escala de cinza
-img_original = cv2.imread("imagens/agro2.jpeg", cv2.IMREAD_GRAYSCALE)
-if img_original is None:
-    raise FileNotFoundError("Imagem não encontrada. Verifique o caminho.")
-img_original = cv2.resize(img_original, (256, 256))  # Tamanho base
+folder_path = 'imagens/'
+for filename in os.listdir(folder_path):
+    if filename.lower().endswith(('jpeg','jpg','png')):
+        image_path = os.path.join(folder_path, filename)
+        # Carrega imagem em escala de cinza
+        img_original = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+        if img_original is None:
+            raise FileNotFoundError("Imagem não encontrada. Verifique o caminho.")
+        img_original = cv2.resize(img_original, (256, 256))  # Tamanho base
 
-# Parâmetros
-n_pyramid_levels = 3  # número de níveis de escala
-tamanho_bloco = 16
-n_clusters_kmeans = 4
-eps_dbscan = 10
-min_samples_dbscan = 5
+        # Parâmetros
+        n_pyramid_levels = 3  # número de níveis de escala
+        tamanho_bloco = 16
+        n_clusters_kmeans = 4
+        eps_dbscan = 10
+        min_samples_dbscan = 5
 
-# Define filtros de textura
-filtros = {
-    "horizontal": np.array([[1, -1]]),
-    "vertical": np.array([[1], [-1]]),
-    "diag45": np.array([[0, 1], [-1, 0]]),
-    "diag135": np.array([[1, 0], [0, -1]]),
-    "circular": cv2.getGaborKernel((5, 5), 2.0, 0, 5.0, 1.0, 0, ktype=cv2.CV_32F)
-}
+        # Define filtros de textura
+        filtros = {
+            "horizontal": np.array([[1, -1]]),
+            "vertical": np.array([[1], [-1]]),
+            "diag45": np.array([[0, 1], [-1, 0]]),
+            "diag135": np.array([[1, 0], [0, -1]]),
+            "circular": cv2.getGaborKernel((5, 5), 2.0, 0, 5.0, 1.0, 0, ktype=cv2.CV_32F),
+            "gaussian": cv2.getGaussianKernel(5, 1) @ cv2.getGaussianKernel(5, 1).T,  # Kernel Gaussiano 5x5, suaviza a imagem, bom para redução de ruído antes da extração de textura
+            "laplacian": np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]]),  # Laplaciano para detecção de bordas, destaca regiões com mudança de intensidade
+            "sobel_x": cv2.Sobel(np.eye(3), cv2.CV_64F, 1, 0, ksize=3)  # Sobel na direção X, destaca bordas verticais
+            }
 
-# Armazena resultados
-resultados_kmeans = []
-resultados_dbscan = []
-imagens_pyramid = []
+        # Armazena resultados
+        resultados_kmeans = []
+        resultados_dbscan = []
+        imagens_pyramid = []
 
-img = img_original.copy()
+        img = img_original.copy()
 
-for level in range(n_pyramid_levels):
-    imagens_pyramid.append(img)
+        for level in range(n_pyramid_levels):
+            imagens_pyramid.append(img)
 
-    # Aplica filtros
-    imagens_filtradas = []
-    for kernel in filtros.values():
-        filtrada = cv2.filter2D(img, -1, kernel)
-        imagens_filtradas.append(filtrada)
+            # Aplica filtros
+            imagens_filtradas = []
+            for kernel in filtros.values():
+                filtrada = cv2.filter2D(img, -1, kernel)
+                imagens_filtradas.append(filtrada)
 
-    # Extrai vetores de textura
-    vetores_textura, h_blocos, w_blocos = extrair_vetores(imagens_filtradas, tamanho_bloco)
+            # Extrai vetores de textura
+            vetores_textura, h_blocos, w_blocos = extrair_vetores(imagens_filtradas, tamanho_bloco)
 
-    # KMeans
-    kmeans = KMeans(n_clusters=n_clusters_kmeans, random_state=0)
-    labels_kmeans = kmeans.fit_predict(vetores_textura)
-    resultado_kmeans = resize_image(img, h_blocos, w_blocos, labels_kmeans)
-    resultados_kmeans.append(resultado_kmeans)
+            # KMeans
+            kmeans = KMeans(n_clusters=n_clusters_kmeans, random_state=0)
+            labels_kmeans = kmeans.fit_predict(vetores_textura)
+            resultado_kmeans = resize_image(img, h_blocos, w_blocos, labels_kmeans)
+            resultados_kmeans.append(resultado_kmeans)
 
-    # DBSCAN
-    dbscan = DBSCAN(eps=eps_dbscan, min_samples=min_samples_dbscan, metric='manhattan')
-    labels_dbscan = dbscan.fit_predict(vetores_textura)
-    resultado_dbscan = resize_image(img, h_blocos, w_blocos, labels_dbscan)
-    resultados_dbscan.append(resultado_dbscan)
+            # Reduz para próximo nível da pirâmide
+            img = cv2.pyrDown(img)
 
-    # Reduz para próximo nível da pirâmide
-    img = cv2.pyrDown(img)
+        # Exibe os resultados
+        plt.figure(figsize=(10, 5 * n_pyramid_levels))
 
-# Exibe os resultados
-plt.figure(figsize=(15, 5 * n_pyramid_levels))
+        for i in range(n_pyramid_levels):
+            plt.subplot(n_pyramid_levels, 2, i * 2 + 1)
+            plt.imshow(imagens_pyramid[i], cmap='gray')
+            plt.title(f"Nível {i} - Original")
+            plt.axis('off')
 
-for i in range(n_pyramid_levels):
-    plt.subplot(n_pyramid_levels, 3, i * 3 + 1)
-    plt.imshow(imagens_pyramid[i], cmap='gray')
-    plt.title(f"Nível {i} - Original")
-    plt.axis('off')
+            plt.subplot(n_pyramid_levels, 2, i * 2 + 2)
+            plt.imshow(resultados_kmeans[i], cmap='tab10')
+            plt.title(f"Nível {i} - KMeans")
+            plt.axis('off')
 
-    plt.subplot(n_pyramid_levels, 3, i * 3 + 2)
-    plt.imshow(resultados_kmeans[i], cmap='tab10')
-    plt.title(f"Nível {i} - KMeans")
-    plt.axis('off')
-
-    plt.subplot(n_pyramid_levels, 3, i * 3 + 3)
-    plt.imshow(resultados_dbscan[i], cmap='tab10')
-    plt.title(f"Nível {i} - DBSCAN (Manhattan)")
-    plt.axis('off')
-
-plt.tight_layout()
-plt.show()
+        plt.tight_layout()
+        #salvar resultados
+        plt.savefig('outputs/'+filename)
+        plt.show()
