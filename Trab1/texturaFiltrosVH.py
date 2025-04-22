@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # Carrega a imagem em tons de cinza
-img = cv2.imread('/home/thauan/Faculdade/VisaoComputacional/Trab1/imagens/agro2.jpeg', cv2.IMREAD_GRAYSCALE)
+img = cv2.imread('imagens/agro2.jpeg', cv2.IMREAD_GRAYSCALE)
 
 # Filtros direcionais simples (horizontal e vertical)
 filtro_horizontal = np.array([[1, -1]])
