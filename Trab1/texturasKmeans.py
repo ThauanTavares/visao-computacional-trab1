@@ -39,7 +39,7 @@ for filename in os.listdir(folder_path):
 
         # Parâmetros
         n_pyramid_levels = 3  # número de níveis de escala
-        tamanho_bloco = 16
+        tamanho_bloco = 1
         n_clusters_kmeans = 4
         eps_dbscan = 10
         min_samples_dbscan = 5
